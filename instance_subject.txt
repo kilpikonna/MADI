@@ -1,0 +1,10 @@
+DIMX : 8
+DIMY : 8
+T E . . R W C K
+W R W W - C - R
+- . E . . . - R
+P W . - P - R .
+S W W E W . W W
+- R . . R - C P
+. W W E W . W .
+. E . . . . . O

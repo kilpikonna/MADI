@@ -1,0 +1,5 @@
+DIMX : 3
+DIMY : 3
+T E K
+E E .
+. S O
