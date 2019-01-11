@@ -270,25 +270,23 @@ while continuer:
 						personnage.deplace(4, dg)
 		if mode > 1:
 			if not(personnage.havesword) and not(personnage.havetreasure) and not(personnage.havekey):
-				personnage.deplace(strat[0][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[0][personnage.y][personnage.x]
 			if personnage.havesword and not(personnage.havetreasure) and not(personnage.havekey):
-				personnage.deplace(strat[1][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[1][personnage.y][personnage.x]
 			if not(personnage.havesword) and not(personnage.havetreasure) and personnage.havekey:
-				personnage.deplace(strat[2][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[2][personnage.y][personnage.x]
 			if personnage.havesword and not(personnage.havetreasure) and personnage.havekey:
-				personnage.deplace(strat[3][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[3][personnage.y][personnage.x]
 			if not(personnage.havesword) and personnage.havetreasure and personnage.havekey:
-				personnage.deplace(strat[4][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[4][personnage.y][personnage.x]
 			if personnage.havesword and personnage.havetreasure and personnage.havekey:
-				personnage.deplace(strat[5][personnage.y][personnage.x], dg)
-				time.sleep(1)
+				dplc = strat[5][personnage.y][personnage.x]
+			personnage.deplace(dplc, dg)
 		affiche(fenetre, dg, personnage)
 		pygame.display.flip()
+
+		if mode > 1:
+			time.sleep(0.3)
 
 		if personnage.dead:
 			continuer_jeu = 0
