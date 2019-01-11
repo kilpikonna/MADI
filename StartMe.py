@@ -3,7 +3,7 @@ from enum import Enum
 from math import inf
 import sys
 import copy
-
+import random
 """ *****************************************************************
 								Constants
 ***************************************************************** """
@@ -23,9 +23,9 @@ NB_ETAPES = 7
 M_REWARDS = np.full((NB_ETAPES, NB_STATES), -1)
 
 R_W = 10000
-R_L = -R_W
+R_L = -R_W/5#TODO : trouver le facteur d'une manière "automatique"
 R_F = -5 
-R_IMPOSSIBLE = -1000000
+R_IMPOSSIBLE = -10000
 
 P_E = 0.7
 
@@ -52,6 +52,7 @@ class Etape(Enum):
 	KTS = 5
 	FINAL = 6
 
+
 def init_rewards():
 	for etape in range(NB_ETAPES):
 		for state in range(NB_STATES):
@@ -61,11 +62,11 @@ def init_rewards():
 			elif state == State.ENEMY.value :
 				if etape == Etape.BASIC.value or etape == Etape.K.value or etape == Etape.KT.value :
 					M_REWARDS[etape][state] += (1- P_E) * R_L
-			elif state == State.TRAP.value :
-				if etape == Etape.KT.value or etape == Etape.KTS.value : 
-					M_REWARDS[etape][state] += 0.1 * R_L + 0.3 * R_W
-				else :
-					M_REWARDS[etape][state] += 0.1 * R_L # Le reste dépend de l'état (distance vers le start)
+			#elif state == State.TRAP.value :
+			#	if etape == Etape.KT.value or etape == Etape.KTS.value : 
+			#		M_REWARDS[etape][state] += 0.1 * R_L + 0.3 * R_W
+			#	else :
+			#		M_REWARDS[etape][state] += 0.1 * R_L # Le reste dépend de l'état (distance vers le start)
 			elif state == State.FRIGO.value :
 				M_REWARDS[etape][state] += R_F
 			elif state == State.WALL.value :
@@ -77,11 +78,12 @@ def init_rewards():
 				#elif etape < Etape.KT.value :
 				#	M_REWARDS[etape][state] += R_W
 			#elif state == State.KEY.value :
-			#	if etape < Etape.K.value :
-			#		M_REWARDS[etape][state] += R_W
+				#if etape < Etape.K.value :
+				#	M_REWARDS[etape][state] += R_W
 			elif state == State.CRACKS.value :
 				M_REWARDS[etape][state] = R_L 
-
+	#for state in range(NB_STATES):
+	#	M_REWARDS[-1][state] = 0
 
 
 
@@ -121,7 +123,7 @@ class DungeonMatrix():
 		print(self.matrix)
 
 
-dg = DungeonMatrix("instance_test.txt")
+dg = DungeonMatrix("instance_1.txt")
 
 """ *****************************************************************
 						Basic Framework - Graphics
@@ -140,6 +142,7 @@ class Dir(Enum):
 	SOUTH = [1,0]
 	WEST = [0,-1]
 	
+
 class MDP():
 	def __init__(self, matrix):
 		self.matrix = matrix
@@ -154,7 +157,8 @@ class MDP():
 
 		self.values_old = [np.zeros((len(matrix), len(matrix[0]))) for i in range(NB_ETAPES)]
 		self.values_new = [np.zeros((len(matrix), len(matrix[0]))) for i in range(NB_ETAPES)]
-		self.dec = [np.full((len(matrix), len(matrix[0])), -1) for i in range(NB_ETAPES)]
+		self.dec = [np.full((len(matrix), len(matrix[0])), 0) for i in range(NB_ETAPES)]
+		self.dec_old = [np.full((len(matrix), len(matrix[0])), 0) for i in range(NB_ETAPES)]
 
 	def is_in_matrix(self, i, j):
 		if i < 0 or j < 0 :
@@ -170,9 +174,182 @@ class MDP():
 			return False
 		return True
 
+	def hasSword(self, etape):
+		if etape == Etape.S.value or etape == Etape.KS.value or etape == Etape.KTS.value :
+			return True
+		else :
+			return False
+
+	def hasKey(self, etape):
+		if etape > Etape.S.value :
+			return True
+		else :
+			return False
+
+	def hasTreasure(self,etape) :
+		if etape == Etape.KT.value or etape == Etape.KTS.value :
+			return True
+		else :
+			return False
+
+	def get_neighborhood(self, etape, line, column, forbidden):
+		res = []
+		#print("f : ",forbidden)
+		for a in Dir:
+			#print((line+a.value[0], column+a.value[1], etape))
+
+			if (a.value[0] != 0 or a.value[1] !=0)  and ((line+a.value[0], column+a.value[1]) not in forbidden) and self.is_in_matrix(line+a.value[0], column+a.value[1]) and self.is_accessible(line+a.value[0], column+a.value[1], etape) :
+				#print("1")
+				res+= [(line+a.value[0], column+a.value[1])]
+		return res
+
+	def state_evaluation(self, etape, line, column, state) :
+		if state == State.BLANK.value : 
+			rew = -1
+			sum_vt = self.values_old[etape][line][column]
+			return rew + sum_vt
+
+		if state == State.ENEMY.value :
+			if  self.hasSword(etape):
+				rew = -1
+				sum_vt = self.values_old[etape][line][column]
+				return rew + sum_vt
+			else :
+				rew = - 1 + (1 - P_E)*R_L
+				sum_vt = P_E * self.values_old[etape][line][column] + (1 - P_E)*self.values_old[Etape.FINAL.value][-1][-1]
+				return rew + sum_vt
+
+		if state == State.TRAP.value :
+			#print("\t 1")
+			if etape == Etape.KT.value or etape == Etape.KTS.value :
+				#print("\t \t 2")
+				rew = -1 + 0.1 * R_L + 0.3 * R_W
+				sum_vt = 0.1 * self.values_old[Etape.FINAL.value][-1][-1] + 0.3 * self.values_old[Etape.FINAL.value][-1][-1] + 0.6 * self.values_old[etape][line][column]
+				#print("\t \t ",rew, sum_vt)
+				return rew + sum_vt
+			#elif etape == Etape.Basic.value :
+			#	rew = R_L
+				#sum_vt =  0.1 * self.values_old[Etape.BASIC.value][-1][-1] + 0.3 * self.values_old[etape][-1][-1] + 0.6 * self.values_old[etape][line][column]
+			else :
+				rew = -1 + 0.1 * R_L - 0.3 * (len(self.matrix) - 1 - line + len(self.matrix[0]) - 1 -column) #TODO : seulement heuristique de la longueur du chemin !!! 
+				#if etape == Etape.BASIC.value : 
+					#print("rw : ",rew, line, column)
+				sum_vt =  0.1 * self.values_old[Etape.FINAL.value][-1][-1] + 0.3 * self.values_old[etape][-1][-1] + 0.6 * self.values_old[etape][line][column]
+				return rew + sum_vt
+
+		if state == State.CRACKS.value : 
+			rew = -1 + R_L
+			sum_vt = self.values_old[Etape.FINAL.value][line][column]
+			return rew + sum_vt
+
+		if state == State.SWORD.value :
+			rew = -1 
+			new_etape = etape 
+			
+			if not self.hasSword(etape) :
+				if etape == Etape.BASIC.value :
+					new_etape = Etape.S.value
+				elif etape == Etape.K.value :
+					new_etape = Etape.KS.value
+				elif etape == Etape.KT.value :
+					new_etape = Etape.KTS.value
+		
+			sum_vt = self.values_old[new_etape][line][column]			
+			return rew + sum_vt
+
+		if state == State.KEY.value :
+			rew = -1
+			new_etape = etape
+			if not self.hasKey(etape): 
+				if etape == Etape.BASIC.value :
+					new_etape = Etape.K.value
+				elif etape == Etape.S.value :
+					new_etape = Etape.KS.value
+
+			sum_vt = self.values_old[new_etape][line][column]
+			return rew + sum_vt
+
+		if state == State.TREASURE.value : 
+			rew = -1 
+			new_etape = etape
+			if etape == Etape.K.value :
+					new_etape = Etape.KT.value
+			elif etape == Etape.KS.value :
+				new_etape = Etape.KTS.value
+			sum_vt = self.values_old[new_etape][line][column]
+			return rew + sum_vt
+
+		if state == State.START.value :
+			rew = -1 
+			new_etape = etape
+			if self.hasTreasure(etape):
+				new_etape = Etape.FINAL.value
+				rew = R_W
+			sum_vt = self.values_old[new_etape][line][column]
+			return rew + sum_vt
+
+		if state == State.PORTAIL.value :
+			nb_cells = 0
+			v = 0
+			for l in range(len(self.matrix)):
+				for c in range(len(self.matrix[0])):
+					#
+					if self.matrix[l][c] != State.PORTAIL.value and self.matrix[l][c] != State.MOVING.value and self.is_accessible(l, c, etape):
+						nb_cells += 1
+						v += self.state_evaluation(etape,l,c,self.matrix[l][c])
+						#v += self.values_old[etape][l][c]
+
+			return -1 + v/nb_cells
+
+
+		if state == State.MOVING.value :
+			v = 0
+			forbidden = []
+			to_explore = []
+			#print(etape, line, column)
+			neighborhood = self.get_neighborhood(etape,line,column, forbidden)
+			total = neighborhood
+			i = 0
+
+			#v += 1/len(neighborhood)*
+			
+			#print("******** START **********\n")
+			while len(neighborhood) > 0 :
+				#print("n :", neighborhood)
+				fac = 0
+				for nei in neighborhood:
+					if self.matrix[nei[0]][nei[1]] != State.MOVING.value :
+						#print(len(neighborhood))
+						#print(neighborhood)
+						#print(self.matrix[nei[0]][nei[1]])
+						#print(self.state_evaluation(etape,line,column, self.matrix[nei[0]][nei[1]]))
+						v += self.state_evaluation(etape,line,column, self.matrix[nei[0]][nei[1]])
+						fac += 1
+						#v += self.values_old[etape][line][column]
+					#	forbidden += [nei]
+					#else :
+					#	if self.matrix[nei[0]][nei[1]] == State.MOVING.value :
+					#		to_explore += [nei]
+				
+				forbidden += [(line, column)]
+				#print(forbidden)
+				neighborhood = [] 
+				#for e in to_explore :
+				#	neighborhood += self.get_neighborhood(etape, line, column, forbidden)
+
+				neighborhood = list(set(neighborhood))
+				total += neighborhood
+				i += 1
+			
+			#print(total)
+			#print("************* END ************** \n")
+			#print(v)
+			return - 1 + v/fac
+			#return self.state_evaluation(etape, line, column, State.BLANK.value)
+			
+
 	def Q_as(self, s, a):
-		if a == [0,0]:
-			return 0
+
 		#print("*** Q_as ***")
 		#print("\t s = ", s, "a = ", a)
 		if (not self.is_in_matrix(s[1] + a[0], s[2] + a[1])) or (not self.is_accessible(s[1] + a[0], s[2] + a[1], s[0])) :
@@ -184,42 +361,24 @@ class MDP():
 			#print(self.values[s[0]][s[1]][s[2]])
 			return R_IMPOSSIBLE + self.values_old[s[0]][s[1]][s[2]]
 			#return M_REWARDS[s[0]][int(self.matrix[s[1]][s[2]])] + self.values[s[0]][s[1]][s[2]]
+		elif a == [0,0]:
+			if s[0] == Etape.FINAL.value :
+				return 0
+			else :
+				return self.state_evaluation(s[0], s[1], s[2], self.matrix[s[1]][s[2]])
 		else :
 			# A revoir ! Passage entre les etapes
 			new_line = s[1] + a[0]
 			new_column = s[2] + a[1]
 			#print("lc :", new_line, new_column)
 			new_etape = s[0]
-
-			if self.matrix[new_line][new_column] == State.SWORD.value :
-				if s[0] == Etape.BASIC.value :
-					new_etape = Etape.S.value
-				elif s[0] == Etape.K.value :
-					new_etape = Etape.KS.value
-				elif s[0] == Etape.KT.value :
-					new_etape = Etape.KTS.value
-
-			elif self.matrix[new_line][new_column] == State.KEY.value :
-				if s[0] == Etape.BASIC.value :
-					new_etape = Etape.K.value
-				elif s[0] == Etape.S.value :
-					new_etape = Etape.KS.value
 			
-			elif self.matrix[new_line][new_column] == State.TREASURE.value :
-				if s[0] == Etape.K.value :
-					new_etape = Etape.KT.value
-				elif s[0] == Etape.KS.value :
-					new_etape = Etape.KTS.value
+			return self.state_evaluation(new_etape, new_line, new_column, self.matrix[new_line][new_column])
 
-			elif self.matrix[new_line][new_column] == State.START.value:
-				if s[0] == Etape.KT.value :
-					new_etape = Etape.FINAL.value
-				elif s[0] == Etape.KTS.value :
-					new_etape = Etape.FINAL.value
+			
 
-			return M_REWARDS[s[0]][int(self.matrix[new_line][new_column])] + self.values_old[new_etape][new_line][new_column]
 
-	def calcul_error(self) :
+	def calcul_error_value(self) :
 		er = 0
 
 		for etape in range(NB_ETAPES):
@@ -234,12 +393,22 @@ class MDP():
 						er = abs(d)
 		return er
 
+	def calcul_error_d(self):
+		er = 0
+
+		for etape in range(NB_ETAPES):
+			for i in range(len(self.matrix)):
+				for j in range(len(self.matrix[0])):
+					d = self.dec[etape][i][j] - self.dec_old[etape][i][j]
+					er += abs(d)
+		print("er policy it : ",er)
+		return er
 
 	def value_iteration(self, epsilon):
 		
 		er = epsilon+1
-
-		while er > epsilon :
+		nb_it = 0
+		while er > epsilon and nb_it < 1000 :
 			print("*** NEW ITERATION *** \n")
 			#print(self.values_old)
 			for s in self.states:
@@ -254,29 +423,363 @@ class MDP():
 				#else :
 				for a in Dir :
 					#print(a)
+					#if a.value != [0,0] or s[0] == NB_ETAPES - 1 :
 					Q += [self.Q_as(s, a.value)]
 			
-				#print(Q)
+				#print("\t ",Q)
 				self.values_new[s[0]][s[1]][s[2]] = np.asarray(Q).max()
 				self.dec[s[0]][s[1]][s[2]] = np.asarray(Q).argmax()
 			#print(self.values_old)
-			#print(self.values_new)
-			er = er - 0.01
-			print(self.calcul_error())
+			print(self.values_new)
+			print(self.dec)
+			#er = er - 0.01
+			er = self.calcul_error_value()
+			print(self.calcul_error_value())
 			self.values_old = copy.deepcopy(self.values_new)
+			nb_it += 1
 
 		print("**************** VALUES ************************* \n")
 		print(self.values_old)
 		print(self.values_new)
 		print(self.dec)
 		print("*************************************************** \n")
+		print("nb_it = ", nb_it)
+
+		return self.dec
+
+	def policy_iteration(self):
+		er = 1
+		nb_it = 0
+		while er != 0 and nb_it < 1000:
+			for s in self.states :
+				#print(etape, line, column)
+				#print(self.states[etape][line][column], self.dec_old[etape][line][column])
+				dt = []
+				if self.dec_old[s[0]][s[1]][s[2]] == 0 :
+					dt = Dir.NULL.value
+				elif self.dec_old[s[0]][s[1]][s[2]] == 1 :
+					dt = Dir.NORD.value
+				elif self.dec_old[s[0]][s[1]][s[2]] == 2 :
+					dt = Dir.EST.value
+				elif self.dec_old[s[0]][s[1]][s[2]] == 3 :
+					dt = Dir.SOUTH.value
+				elif self.dec_old[s[0]][s[1]][s[2]] == 4 :
+					dt = Dir.WEST.value
+
+				self.values_old[s[0]][s[1]][s[2]] = self.Q_as(s, dt)
+				Q = []
+				for a in Dir :
+					Q += [self.Q_as(s, a.value)]
+					self.dec[s[0]][s[1]][s[2]] = np.asarray(Q).argmax()
+
+			er = self.calcul_error_d()
+			self.dec_old = copy.deepcopy(self.dec)
+			nb_it += 1
+
+		print(self.values_old)
+		print(self.values_new)
+		print(self.dec)
+		print("nb_it :", nb_it)
+		return self.dec
 
 mdp = MDP(dg.matrix)
-mdp.value_iteration(1)
+#m_decision = mdp.value_iteration(0.01)
+#m_decision = mdp.policy_iteration()
 """ *****************************************************************
 						Reinforcement learning
 ***************************************************************** """
 
+
+class QLearning():
+	def __init__(self, matrix):
+		self.matrix = matrix
+		self.states = []
+
+		for etape in range(NB_ETAPES):
+			l = []
+			for line in range(len(self.matrix)):
+				for column in range(len(self.matrix[0])):
+					l += [(etape, line, column)]
+			self.states += l
+
+		self.values_old = [np.zeros((len(matrix), len(matrix[0]),5)) for i in range(NB_ETAPES)]
+		#self.values_new = [np.zeros((len(matrix), len(matrix[0]))) for i in range(NB_ETAPES)]
+		self.dec = [np.full((len(matrix), len(matrix[0])), 0) for i in range(NB_ETAPES)]
+		#self.dec_old = [np.full((len(matrix), len(matrix[0])), 0) for i in range(NB_ETAPES)]
+
+	def is_in_matrix(self, i, j):
+		#print("\t in : ", i,j)
+		if i < 0 or j < 0 :
+			#print("\t \t not in\n")
+			return False
+		elif i >= len(self.matrix) or j >= len(self.matrix[0]) :
+			#print("\t \t not in\n")
+			return False
+		#print("\t \t in\n")
+		return True
+
+	def is_accessible(self, i, j, etape):
+		#print("\t acc :", i,j,etape)
+		if self.matrix[i][j] == State.WALL.value :
+			#print("\t \t not acc\n")
+			return False
+		if self.matrix[i][j] == State.TREASURE.value and etape < Etape.K.value :
+			#print("\t \t not acc\n")
+			return False
+		#print("\t \t acc\n")
+		return True
+
+	def hasSword(self, etape):
+		if etape == Etape.S.value or etape == Etape.KS.value or etape == Etape.KTS.value :
+			return True
+		else :
+			return False
+
+	def hasKey(self, etape):
+		if etape > Etape.S.value :
+			return True
+		else :
+			return False
+
+	def hasTreasure(self,etape) :
+		if etape == Etape.KT.value or etape == Etape.KTS.value :
+			return True
+		else :
+			return False
+
+	def get_neighborhood(self, etape, line, column, forbidden):
+		res = []
+		#print("f : ",forbidden)
+		for a in Dir:
+			#print((line+a.value[0], column+a.value[1], etape))
+
+			if (a.value[0] != 0 or a.value[1] !=0)  and ((line+a.value[0], column+a.value[1]) not in forbidden) and self.is_in_matrix(line+a.value[0], column+a.value[1]) and self.is_accessible(line+a.value[0], column+a.value[1], etape) :
+				#print("1")
+				res+= [(line+a.value[0], column+a.value[1])]
+		return res
+
+	def get_r_sp(self, etape, line, column, state) :
+		#print("\t",etape, line, column, state)
+		if state == State.BLANK.value :
+			return (-1,(etape,line,column))
+
+		if state == State.ENEMY.value : 
+			if self.hasSword(etape):
+				return (-1,(etape, line, column))
+			else :
+				p = random.random()
+				if p <= P_E :
+					return(-1, (etape, line, column))
+				else :
+					return (-1 + R_L, (Etape.BASIC.value, len(self.matrix) -1, len(self.matrix[0]) - 1))
+
+				
+		if state == State.TRAP.value :
+			if self.hasTreasure(etape) :
+				p = random.random()
+				if p <= 0.1 :
+					return (-1 + R_L, (Etape.BASIC.value, len(self.matrix) -1, len(self.matrix[0]) - 1))
+				elif p <= 0.1 + 0.3 :
+					return (-1 + R_W, (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0]) -1))
+				else :
+					return (-1, (etape, line, column)) 
+			
+			else :
+				p = random.random()
+				if p <= 0.1 :
+					return (-1 + R_L, (Etape.BASIC.value, len(self.matrix) -1, len(self.matrix[0]) - 1))
+				elif p <= 0.1 + 0.3 :
+					return (-1 - (len(self.matrix) - 1 - line + len(self.matrix[0]) - 1 -column), (etape, len(self.matrix) -1, len(self.matrix[0]) -1))
+				else :
+					return (-1, (etape, line, column)) 
+
+		if state == State.CRACKS.value :
+			return (-1 + R_L, (Etape.BASIC.value, len(self.matrix) -1 , len(self.matrix[0]) - 1))	
+
+		if state == State.SWORD.value :
+			new_etape = etape 
+			
+			if not self.hasSword(etape) :
+				if etape == Etape.BASIC.value :
+					new_etape = Etape.S.value
+				elif etape == Etape.K.value :
+					new_etape = Etape.KS.value
+				elif etape == Etape.KT.value :
+					new_etape = Etape.KTS.value
+			return (-1, (new_etape, line, column))
+
+		if state == State.KEY.value :
+			new_etape = etape
+			if not self.hasKey(etape): 
+				if etape == Etape.BASIC.value :
+					new_etape = Etape.K.value
+				elif etape == Etape.S.value :
+					new_etape = Etape.KS.value
+
+			return (-1, (new_etape, line, column))
+
+		if state == State.TREASURE.value :
+			new_etape = etape
+			if etape == Etape.K.value :
+					new_etape = Etape.KT.value
+			elif etape == Etape.KS.value :
+				new_etape = Etape.KTS.value
+
+			return (-1, (new_etape, line, column))
+
+		if state == State.START.value :
+			new_etape = etape
+			if self.hasTreasure(etape):
+				new_etape = Etape.FINAL.value
+
+			return (-1, (new_etape, line, column))	
+
+		if state == State.MOVING.value :
+
+			sp = state
+			l = line
+			c = column 
+
+			l_nei = []
+			for a in Dir:		
+				if self.is_in_matrix(l + a.value[0], c + a.value[1]) and self.is_accessible(l + a.value[0], c + a.value[1], etape):
+					l_nei += [[l + a.value[0], c + a.value[1]]]
+			index = random.randrange(0, len(l_nei))
+			new_state = l_nei[index]
+			l = new_state[0]
+			c = new_state[1]
+			sp = self.matrix[l][c]
+
+			return self.get_r_sp(etape, l, c, sp)
+		
+		if state == State.PORTAIL.value :
+			sp = state
+			l = line
+			c = column
+
+			l_nei = []
+			for il in range(len(self.matrix)):
+				for ic in range(len(self.matrix[0])):
+					if self.is_accessible(il, ic, etape):
+						l_nei += [[il, ic]]
+			index = random.randrange(0, len(l_nei))
+			#print(l_nei)
+			return self.get_r_sp(etape, l_nei[index][0], l_nei[index][1], self.matrix[l_nei[index][0]][l_nei[index][1]])
+		
+	def index_to_dir(self, index) :
+		if index == 0 :
+			return Dir.NULL.value
+		if index == 1 :
+			return Dir.NORD.value
+		if index == 2 :
+			return Dir.EST.value
+		if index == 3 :
+			return Dir.SOUTH.value
+		if index == 4 :
+			return Dir.WEST.value
+
+	def q_learning(self):
+
+		for etape in range(NB_ETAPES -1 ):
+			for line in range(len(self.matrix)):
+				for column in range(len(self.matrix[0])):
+					for a in range(5):
+						dir = self.index_to_dir(a)
+						#print("state elca: ", etape, line, column, dir)
+						if not self.is_in_matrix(line + dir[0], column + dir[1]) or not self.is_accessible(line + dir[0], column + dir[1], etape):
+							self.values_old[etape][line][column][a] = R_IMPOSSIBLE
+						elif dir == [0,0] :
+							self.values_old[etape][line][column][a] = R_IMPOSSIBLE
+
+		#print(self.values_old)
+		#return
+		nb_periods = 500
+		cpt = 0
+		#print(self.values_old)
+		while cpt < nb_periods :
+			cpt += 1
+			state = (Etape.BASIC.value, len(self.matrix) -1, len(self.matrix[0]) -1)
+			cpt2 = 0
+			#print("final state :")
+			while state != (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0])-1) :
+				#print("final state :", (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0])-1))
+				#print("act state :", state)
+				cpt2 += 1
+
+				#print("state : ",state)
+				a_best = 0
+				same = [a_best]
+				for a in range(5):
+					#print(self.values_old[state[0]][state[1]][state[2]][a])
+					if self.values_old[state[0]][state[1]][state[2]][a] > self.values_old[state[0]][state[1]][state[2]][a_best]:
+						a_best = a
+						same = [a_best]
+					elif self.values_old[state[0]][state[1]][state[2]][a] == self.values_old[state[0]][state[1]][state[2]][a_best]:
+						same += [a]
+
+				ind = random.randrange(0, len(same))
+				a_best = same[ind]
+				#print(a_best)
+					#print("\t ",self.values_old[state[0]][state[1]][state[2]][a])
+				"""
+				for a in Dir :
+					#print(a)
+					if a.value == [0,0] and state[0] != Etape.FINAL.value :
+						l_a += [R_IMPOSSIBLE]
+					elif self.is_in_matrix(state[1] + a.value[0], state[2] + a.value[1]):
+						l_a += [self.values_old[state[0]][state[1]][state[2]]]
+					else :
+						l_a += [R_IMPOSSIBLE]
+				"""
+				#a_best = np.asarray(l_a).max()
+				#print("\t a_best : ", a_best)
+				#print("\t : ",self.dec[state[0]][state[1]][state[2]])
+				#print("\t : ",self.dec[state[0]][state[1]][state[2]])
+				self.dec[state[0]][state[1]][state[2]] =  a_best
+				a_dir = [0,0]
+				#print("\t : ",self.dec[state[0]][state[1]][state[2]])
+				if a_best == 0 :
+					a_dir = Dir.NULL.value
+				if a_best == 1 :
+					a_dir = Dir.NORD.value
+				if a_best == 2 :
+					a_dir = Dir.EST.value
+				if a_best == 3 :
+					a_dir = Dir.SOUTH.value
+				if a_best == 4 :
+					a_dir = Dir.WEST.value
+
+				if self.is_in_matrix(state[1] + a_dir[0], state[2] + a_dir[1]) and self.is_accessible(state[1] + a_dir[0], state[2] + a_dir[1], state[0]): 
+					r_sp = self.get_r_sp(state[0], state[1] + a_dir[0], state[2] + a_dir[1], self.matrix[state[1]+ a_dir[0]][state[2] + a_dir[1]])
+					#print("r_sp : ",r_sp)
+					r = r_sp[0]
+					sp = r_sp[1]
+				
+					ap_best = 0
+					for a in range(5):
+						if self.values_old[state[0]][state[1]][state[2]][a] >= self.values_old[state[0]][state[1]][state[2]][ap_best]:
+							ap_best = a
+							#print("\t ",self.values_old[state[0]][state[1]][state[2]][a])
+
+				
+					self.values_old[state[0]][state[1]][state[2]][a_best] = self.values_old[state[0]][state[1]][state[2]][a_best] + 1/(cpt+1)*(r + self.values_old[sp[0]][sp[1]][sp[2]][ap_best] - self.values_old[state[0]][state[1]][state[2]][a_best])
+					state = sp
+					#print(self.values_old)
+				else : 
+					self.values_old[state[0]][state[1]][state[2]][a_best] = self.values_old[state[0]][state[1]][state[2]][a_best] + 1/(cpt+1)*(R_IMPOSSIBLE) 
+				
+				if cpt2 % 100000 == 0:
+					print("\t ", cpt2)
+			print("nb_it : ", cpt2)
+		print(self.dec)
+				#print(sp)
+		print(self.values_old[1])
+
+
+random.random()
+
+QL = QLearning(dg.matrix)
+QL.q_learning()
 """ *****************************************************************
 								Bonus
 ***************************************************************** """
