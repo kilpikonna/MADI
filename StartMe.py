@@ -89,16 +89,55 @@ def init_rewards():
 
 
 init_rewards()
-print(M_REWARDS)
+#print(M_REWARDS)
 
 class DungeonMatrix():
-	def __init__(self, file_name = "empty"):
+	def __init__(self, file_name):
 		self.game_etape = "BASIC"
+		self.enemies = []
 	
-		if file_name == "empty" :
-			self.random_instance()
+		if type(file_name) == int :
+			self.random_instance(file_name)
 		else :
 			self.read_instance(file_name)
+
+
+
+	def random_instance(self, n):
+		self.matrix = np.ones((n, n))
+		self.matrix[random.randrange(n)][random.randrange(n)] = D_SHORTS["O"]
+		point = [random.randrange(n), random.randrange(n)]
+		if self.matrix[point[0]][point[1]] == 1:
+			self.matrix[point[0]][point[1]] = D_SHORTS["T"]
+		point = [random.randrange(n), random.randrange(n)]
+		if self.matrix[point[0]][point[1]] == 1:
+			self.matrix[point[0]][point[1]] = D_SHORTS["K"]
+		point = [random.randrange(n), random.randrange(n)]
+		if self.matrix[point[0]][point[1]] == 1:
+			self.matrix[point[0]][point[1]] = D_SHORTS["S"]
+
+
+		for i in range(n):
+			for j in range(n):
+				if self.matrix[i][j] == 1:
+					p = random.random()
+					if p < 0.25:
+						p = random.random()
+						if p < 0.25 : 
+							self.matrix[i][j] = D_SHORTS["C"]
+						else:
+							self.matrix[i][j] = D_SHORTS["W"]
+					else:
+						p = random.random()
+						if p < 0.4:
+							l = [D_SHORTS["E"], D_SHORTS["R"], D_SHORTS["-"], D_SHORTS["P"], D_SHORTS["F"]]
+							k = random.randrange(5)
+							self.matrix[i][j] = l[k]
+							if D_SHORTS["E"] == l[k]:
+								self.enemies.append((i, j))
+
+
+		#print(self.matrix, self.enemies)
 
 	def read_instance(self, file_name):
 		#TODO : read from file
@@ -117,13 +156,16 @@ class DungeonMatrix():
 			line = file.readline()
 			line_split = line.split(" ")
 			for j in range(self.nb_columns) :
-				self.matrix[i][j] = D_SHORTS[line_split[j].rstrip()]
+				c = line_split[j].rstrip()
+				self.matrix[i][j] = D_SHORTS[c]
+				if c == "E" :
+					self.enemies.append((i, j))
 
 		file.close()
 		print(self.matrix)
 
 
-dg = DungeonMatrix("instance_1.txt")
+#dg = DungeonMatrix("instance_subject.txt")
 
 """ *****************************************************************
 						Basic Framework - Graphics
@@ -387,9 +429,9 @@ class MDP():
 					d = self.values_old[etape][i][j] - self.values_new[etape][i][j]
 					#print("\t ",d)
 					if abs(d) > er :
-						print("eij :",etape, i, j)
-						print(self.values_old[etape][i][j])
-						print(self.values_new[etape][i][j])
+						#print("eij :",etape, i, j)
+						#print(self.values_old[etape][i][j])
+						#print(self.values_new[etape][i][j])
 						er = abs(d)
 		return er
 
@@ -401,7 +443,7 @@ class MDP():
 				for j in range(len(self.matrix[0])):
 					d = self.dec[etape][i][j] - self.dec_old[etape][i][j]
 					er += abs(d)
-		print("er policy it : ",er)
+		#print("er policy it : ",er)
 		return er
 
 	def value_iteration(self, epsilon):
@@ -409,7 +451,7 @@ class MDP():
 		er = epsilon+1
 		nb_it = 0
 		while er > epsilon and nb_it < 1000 :
-			print("*** NEW ITERATION *** \n")
+			#print("*** NEW ITERATION *** \n")
 			#print(self.values_old)
 			for s in self.states:
 				#print("state : ", s)
@@ -430,20 +472,20 @@ class MDP():
 				self.values_new[s[0]][s[1]][s[2]] = np.asarray(Q).max()
 				self.dec[s[0]][s[1]][s[2]] = np.asarray(Q).argmax()
 			#print(self.values_old)
-			print(self.values_new)
-			print(self.dec)
+			#print(self.values_new)
+			#print(self.dec)
 			#er = er - 0.01
 			er = self.calcul_error_value()
-			print(self.calcul_error_value())
+			#print(self.calcul_error_value())
 			self.values_old = copy.deepcopy(self.values_new)
 			nb_it += 1
 
-		print("**************** VALUES ************************* \n")
-		print(self.values_old)
-		print(self.values_new)
-		print(self.dec)
-		print("*************************************************** \n")
-		print("nb_it = ", nb_it)
+		#print("**************** VALUES ************************* \n")
+		#print(self.values_old)
+		#print(self.values_new)
+		#print(self.dec)
+		#print("*************************************************** \n")
+		#print("nb_it = ", nb_it)
 
 		return self.dec
 
@@ -476,13 +518,14 @@ class MDP():
 			self.dec_old = copy.deepcopy(self.dec)
 			nb_it += 1
 
-		print(self.values_old)
-		print(self.values_new)
-		print(self.dec)
-		print("nb_it :", nb_it)
+		#print(self.values_old)
+		#print(self.values_new)
+		#print(self.dec)
+		#print("nb_it :", nb_it)
 		return self.dec
+#dg = DungeonMatrix("instance_subject.txt")
 
-mdp = MDP(dg.matrix)
+#mdp = MDP(dg.matrix)
 #m_decision = mdp.value_iteration(0.01)
 #m_decision = mdp.policy_iteration()
 """ *****************************************************************
@@ -770,16 +813,16 @@ class QLearning():
 				
 				if cpt2 % 100000 == 0:
 					print("\t ", cpt2)
-			print("nb_it : ", cpt2)
-		print(self.dec)
+			#print("nb_it : ", cpt2)
+		#print(self.dec)
 				#print(sp)
-		print(self.values_old[1])
+		#print(self.values_old[1])
 
 
-random.random()
+#random.random()
 
-QL = QLearning(dg.matrix)
-QL.q_learning()
+#QL = QLearning(dg.matrix)
+#QL.q_learning()
 """ *****************************************************************
 								Bonus
 ***************************************************************** """
