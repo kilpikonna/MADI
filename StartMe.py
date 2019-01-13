@@ -4,6 +4,8 @@ from math import inf
 import sys
 import copy
 import random
+
+import time
 """ *****************************************************************
 								Constants
 ***************************************************************** """
@@ -24,7 +26,7 @@ M_REWARDS = np.full((NB_ETAPES, NB_STATES), -1)
 
 R_W = 10000
 R_L = -R_W/5#TODO : trouver le facteur d'une manière "automatique"
-R_F = -5 
+R_F = -10
 R_IMPOSSIBLE = -10000
 
 P_E = 0.7
@@ -87,7 +89,6 @@ def init_rewards():
 
 
 
-
 init_rewards()
 #print(M_REWARDS)
 
@@ -105,33 +106,45 @@ class DungeonMatrix():
 
 	def random_instance(self, n):
 		self.matrix = np.ones((n, n))
-		self.matrix[random.randrange(n)][random.randrange(n)] = D_SHORTS["O"]
+
+
+		#self.matrix[random.randrange(n)][random.randrange(n)] = D_SHORTS["O"]
+		self.matrix[n-1][n-1] = D_SHORTS["O"]
 		point = [random.randrange(n), random.randrange(n)]
-		if self.matrix[point[0]][point[1]] == 1:
-			self.matrix[point[0]][point[1]] = D_SHORTS["T"]
+		
+		while self.matrix[point[0]][point[1]] != 1 :
+			point = [random.randrange(n), random.randrange(n)]
+		
+		self.matrix[0][0] = D_SHORTS["T"]
+		
 		point = [random.randrange(n), random.randrange(n)]
-		if self.matrix[point[0]][point[1]] == 1:
-			self.matrix[point[0]][point[1]] = D_SHORTS["K"]
+		while self.matrix[point[0]][point[1]] != 1 :
+			point = [random.randrange(n), random.randrange(n)]
+		self.matrix[point[0]][point[1]] = D_SHORTS["K"]
 		point = [random.randrange(n), random.randrange(n)]
-		if self.matrix[point[0]][point[1]] == 1:
-			self.matrix[point[0]][point[1]] = D_SHORTS["S"]
+		while self.matrix[point[0]][point[1]] != 1 :
+			point = [random.randrange(n), random.randrange(n)]
+		self.matrix[point[0]][point[1]] = D_SHORTS["S"]
 
 
 		for i in range(n):
 			for j in range(n):
 				if self.matrix[i][j] == 1:
 					p = random.random()
-					if p < 0.25:
+					if p < 0.2:
 						p = random.random()
-						if p < 0.25 : 
+						if p < 0.2 : 
 							self.matrix[i][j] = D_SHORTS["C"]
 						else:
 							self.matrix[i][j] = D_SHORTS["W"]
 					else:
 						p = random.random()
-						if p < 0.4:
+						if p < 0.15:
+							self.matrix[i][j] = D_SHORTS["E"]
+							self.enemies.append((i, j))
+						elif p < 0.5 :
 							l = [D_SHORTS["E"], D_SHORTS["R"], D_SHORTS["-"], D_SHORTS["P"], D_SHORTS["F"]]
-							k = random.randrange(5)
+							k = random.randrange(5) #!!!! 5
 							self.matrix[i][j] = l[k]
 							if D_SHORTS["E"] == l[k]:
 								self.enemies.append((i, j))
@@ -251,6 +264,11 @@ class MDP():
 			sum_vt = self.values_old[etape][line][column]
 			return rew + sum_vt
 
+		if state == State.FRIGO.value : 
+			rew = -1 + R_F
+			sum_vt = self.values_old[etape][line][column]
+			return rew + sum_vt
+
 		if state == State.ENEMY.value :
 			if  self.hasSword(etape):
 				rew = -1
@@ -354,7 +372,7 @@ class MDP():
 			i = 0
 
 			#v += 1/len(neighborhood)*
-			
+			fac = 0
 			#print("******** START **********\n")
 			while len(neighborhood) > 0 :
 				#print("n :", neighborhood)
@@ -386,7 +404,9 @@ class MDP():
 			#print(total)
 			#print("************* END ************** \n")
 			#print(v)
-			return - 1 + v/fac
+			if fac != 0 :
+				return - 1 + v/fac 
+			return -1 + v
 			#return self.state_evaluation(etape, line, column, State.BLANK.value)
 			
 
@@ -394,7 +414,7 @@ class MDP():
 
 		#print("*** Q_as ***")
 		#print("\t s = ", s, "a = ", a)
-		if (not self.is_in_matrix(s[1] + a[0], s[2] + a[1])) or (not self.is_accessible(s[1] + a[0], s[2] + a[1], s[0])) :
+		if (not self.is_in_matrix(s[1] + a[0], s[2] + a[1])) :
 			#print("\t \t not in matrix ! ")
 			#print(self.matrix[s[1]][s[2]])
 			#print(M_REWARDS[s[0]][int(self.matrix[s[1]][s[2]])])
@@ -402,6 +422,8 @@ class MDP():
 			#print(self.values)
 			#print(self.values[s[0]][s[1]][s[2]])
 			return R_IMPOSSIBLE + self.values_old[s[0]][s[1]][s[2]]
+		elif (not self.is_accessible(s[1] + a[0], s[2] + a[1], s[0])) :
+			return -1*(len(self.matrix) + len(self.matrix[0])  - s[1] - s[2]) + self.values_old[Etape.BASIC.value][len(self.matrix) - 1][len(self.matrix[0])-1]
 			#return M_REWARDS[s[0]][int(self.matrix[s[1]][s[2]])] + self.values[s[0]][s[1]][s[2]]
 		elif a == [0,0]:
 			if s[0] == Etape.FINAL.value :
@@ -480,6 +502,11 @@ class MDP():
 			self.values_old = copy.deepcopy(self.values_new)
 			nb_it += 1
 
+			if nb_it % 100 == 0 :
+				print(nb_it)
+				print(er)
+
+
 		#print("**************** VALUES ************************* \n")
 		#print(self.values_old)
 		#print(self.values_new)
@@ -487,6 +514,7 @@ class MDP():
 		#print("*************************************************** \n")
 		#print("nb_it = ", nb_it)
 
+		#return nb_it
 		return self.dec
 
 	def policy_iteration(self):
@@ -518,10 +546,15 @@ class MDP():
 			self.dec_old = copy.deepcopy(self.dec)
 			nb_it += 1
 
+			if nb_it % 100 == 0 :
+				print(nb_it)
+				print(er)
+
 		#print(self.values_old)
 		#print(self.values_new)
 		#print(self.dec)
 		#print("nb_it :", nb_it)
+		#return nb_it
 		return self.dec
 #dg = DungeonMatrix("instance_subject.txt")
 
@@ -605,6 +638,10 @@ class QLearning():
 		#print("\t",etape, line, column, state)
 		if state == State.BLANK.value :
 			return (-1,(etape,line,column))
+
+		if state == State.FRIGO.value :
+			return (-1 + R_F,(etape,line,column))
+
 
 		if state == State.ENEMY.value : 
 			if self.hasSword(etape):
@@ -736,7 +773,7 @@ class QLearning():
 
 		#print(self.values_old)
 		#return
-		nb_periods = 500
+		nb_periods = 10
 		cpt = 0
 		#print(self.values_old)
 		while cpt < nb_periods :
@@ -744,7 +781,7 @@ class QLearning():
 			state = (Etape.BASIC.value, len(self.matrix) -1, len(self.matrix[0]) -1)
 			cpt2 = 0
 			#print("final state :")
-			while state != (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0])-1) :
+			while state != (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0])-1) and cpt2 < 1000000 :
 				#print("final state :", (Etape.FINAL.value, len(self.matrix) -1, len(self.matrix[0])-1))
 				#print("act state :", state)
 				cpt2 += 1
@@ -813,7 +850,10 @@ class QLearning():
 				
 				if cpt2 % 100000 == 0:
 					print("\t ", cpt2)
-			#print("nb_it : ", cpt2)
+			print("nb_it : ", cpt2)
+		#print(self.dec)
+		return self.dec
+		#return cpt2
 		#print(self.dec)
 				#print(sp)
 		#print(self.values_old[1])
@@ -823,6 +863,61 @@ class QLearning():
 
 #QL = QLearning(dg.matrix)
 #QL.q_learning()
+"""
+f = open("tests_vi.txt", "w")
+f.write("--------------- VALUE ITER ---------------------------------- \n" )
+
+for i in range(5,15):
+	f = open("tests_vi.txt", "a")
+	f.write("taille : "+str(i)+"\n")
+	for j in range(20):
+		start = time. time()
+		dg = DungeonMatrix(i)
+		print(dg.matrix)
+		m = MDP(dg.matrix)
+		f.write(str(m.value_iteration(1)))
+		f.write("\n")
+		end = time. time()
+		f.write(str(end - start)+"\n")
+	f.close()
+
+f.write("--------------- POLICY ITER ---------------------------------- \n" )
+
+
+f = open("tests_pi.txt", "w")
+for i in range(5,15):
+	f = open("tests_pi.txt", "a")
+	f.write("taille : "+str(i)+"\n")
+	for j in range(100):
+		start = time. time()
+		dg = DungeonMatrix(i)
+		print(dg.matrix)
+		m = MDP(dg.matrix)
+		f.write(str(m.policy_iteration()))
+		f.write("\n")
+		end = time. time()
+		f.write(str(end - start)+"\n")
+	f.close()	
+
+
+f = open("tests_ql.txt", "w")
+
+f.write("--------------- QL ---------------------------------- \n" )
+
+for i in range(5,15):
+	f = open("tests_ql.txt", "a")
+	f.write("taille : "+str(i)+"\n")
+	for j in range(10):
+		start = time. time()
+		dg = DungeonMatrix(i)
+		print(dg.matrix)
+		m = QLearning(dg.matrix)
+		f.write(str(m.q_learning()))
+		f.write("\n")
+		end = time. time()
+		f.write(str(end - start)+"\n")
+	f.close()
+"""
 """ *****************************************************************
 								Bonus
 ***************************************************************** """
