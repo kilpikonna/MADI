@@ -177,8 +177,57 @@ class DungeonMatrix():
 		file.close()
 		print(self.matrix)
 
+	def trouve_min(self, Q, d):
+		mini = np.inf
+		sommet = -1
+		for s in Q:
+			if d[s[0]][s[1]] < mini:
+				mini = d[s[0]][s[1]]
+				sommet = s
+		if sommet == -1:
+			return random.choice(Q)
+		return sommet
 
-#dg = DungeonMatrix("instance_subject.txt")
+	def maj_dist(self, s1, s2, d):
+		if d[s2[0]][s2[1]] > d[s1[0]][s1[1]] + 1:
+			d[s2[0]][s2[1]] = d[s1[0]][s1[1]] + 1
+
+
+	def is_realisable(self):
+		reponse = 0
+		Q = []
+		n = len(self.matrix)
+		d = [[np.inf for i in range(n)] for j in range(n)]
+		d[n - 1][n - 1] = 0
+		for i in range(n):
+			for j in range(n):
+				if self.matrix[i][j] != D_SHORTS["W"] and self.matrix[i][j] != D_SHORTS["C"]:
+					Q.append((i, j))
+		while Q != []:
+			s1 = self.trouve_min(Q, d)
+			Q.remove(s1)
+			if s1[0] > 0:
+				s2 = (s1[0] - 1, s1[1])
+				self.maj_dist(s1, s2, d)
+			if s1[0] < (n - 1):
+				s2 = (s1[0] + 1, s1[1])
+				self.maj_dist(s1, s2, d)
+			if s1[1] > 0:
+				s2 = (s1[0], s1[1] - 1)
+				self.maj_dist(s1, s2, d)
+			if s1[1] < (n - 1):
+				s2 = (s1[0], s1[1] + 1)
+				self.maj_dist(s1, s2, d)
+		for i in range(n):
+			for j in range(n):
+				if self.matrix[i][j] == D_SHORTS["K"]:
+					reponse = (d[i][j] < np.inf)
+		reponse = (reponse and (d[n - 1][n - 1] < np.inf))
+		print(reponse)
+
+
+#dg = DungeonMatrix(5)
+#print(dg.matrix, dg.is_realisable())
 
 """ *****************************************************************
 						Basic Framework - Graphics
